@@ -8,10 +8,13 @@ namespace RP.Sound.Effects;
 /// </summary>
 internal sealed class Biquad
 {
-    private readonly double b0, b1, b2, a1, a2;
+    private double b0, b1, b2, a1, a2;
     private double x1, x2, y1, y2;
 
-    private Biquad(double b0, double b1, double b2, double a0, double a1, double a2)
+    private Biquad(double b0, double b1, double b2, double a0, double a1, double a2) =>
+        Set(b0, b1, b2, a0, a1, a2);
+
+    private void Set(double b0, double b1, double b2, double a0, double a1, double a2)
     {
         // Normalising by a0 up front saves a divide per sample.
         this.b0 = b0 / a0;
@@ -19,6 +22,17 @@ internal sealed class Biquad
         this.b2 = b2 / a0;
         this.a1 = a1 / a0;
         this.a2 = a2 / a0;
+    }
+
+    /// <summary>
+    /// Moves an existing low-pass filter's corner without touching its state — how a filter sweep
+    /// is done. Replacing the filter object instead would reset its memory of recent samples and
+    /// click at every change; retuning in place keeps the audio continuous.
+    /// </summary>
+    public void RetuneLowPass(int sampleRate, double cutoff, double q)
+    {
+        (double sin, double cos, double alpha) = Prepare(sampleRate, cutoff, q);
+        Set((1 - cos) / 2, 1 - cos, (1 - cos) / 2, 1 + alpha, -2 * cos, 1 - alpha);
     }
 
     public static Biquad LowPass(int sampleRate, double cutoff, double q)
