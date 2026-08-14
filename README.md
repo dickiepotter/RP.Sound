@@ -18,6 +18,7 @@
 - [The types at a glance](#the-types-at-a-glance)
 - [The core: buffers, frequencies, levels, envelopes](#the-core-buffers-frequencies-levels-envelopes)
 - [Synthesis: oscillators, noise, and a plucked string](#synthesis-oscillators-noise-and-a-plucked-string)
+- [The synthesizer: one architecture worth learning](#the-synthesizer-one-architecture-worth-learning)
 - [Effects: filters, echo, reverb, distortion](#effects-filters-echo-reverb-distortion)
 - [Physical modelling: how objects sound](#physical-modelling-how-objects-sound)
   - [Materials](#materials)
@@ -28,8 +29,10 @@
   - [Granular surfaces (PhISEM)](#granular-surfaces-phisem)
   - [Footsteps](#footsteps)
   - [Whoosh — the sound of speed](#whoosh--the-sound-of-speed)
+- [Instruments: a rhythm section from first principles](#instruments-a-rhythm-section-from-first-principles)
 - [Ambience: wind, rain, fire, thunder](#ambience-wind-rain-fire-thunder)
 - [Mood, tension and genre](#mood-tension-and-genre)
+- [Background music: genres as specifications](#background-music-genres-as-specifications)
 - [Layering: keeping every sound functional](#layering-keeping-every-sound-functional)
 - [The showcase application](#the-showcase-application)
 - [Academic sources](#academic-sources)
@@ -119,6 +122,15 @@ graph TD
 
     subgraph synth["Synthesis"]
         OSC["Oscillator"] --- NOI["Noise<br/>white/pink/brown"] --- KS["PluckedString<br/>(Karplus–Strong)"] --- SW["FrequencySweep"]
+        LFO["Lfo<br/>vibrato · wobble · tremolo"] --> SPX["SynthPatch<br/>osc → filter → amp"] --> SYN["Synthesizer"]
+    end
+
+    subgraph inst["Instruments"]
+        DRUMS["KickDrum · SnareDrum · HiHat<br/>TomDrum · Cymbal"] --- STR["BassGuitar · Guitar<br/>(Jaffe–Smith extensions)"] --- MALL["Mallet<br/>marimba · xylophone · glockenspiel"] --- WINDS["Organ · Flute · Brass · SynthPad"]
+    end
+
+    subgraph genres["Background music"]
+        GRV["Groove<br/>tempo · meter · swing"] --> TRK["BluesTrack · RockTrack · DubstepTrack<br/>HouseTrack · ElectronicaTrack"]
     end
 
     subgraph phys["Physics — Gaver's taxonomy"]
@@ -147,8 +159,10 @@ graph TD
 
     ISound --> synth
     ISound --> phys
+    ISound --> inst
     ISound --> amb
     ISound --> mood
+    ISound --> genres
     mix --> ISound
 
     classDef found fill:#ffe9a8,stroke:#b8860b,color:#222;
@@ -163,6 +177,15 @@ graph TD
 | `Envelope` | A loudness contour (ADSR) | Physical decays are exponential |
 | `Oscillator`, `Noise`, `FrequencySweep` | Raw tonal / noisy material | Harmonic series; 1/f spectra |
 | `PluckedString` | A plucked string | Karplus & Strong (1983) |
+| `SynthPatch`, `Lfo`, `Synthesizer` | The subtractive synthesizer | The Minimoog signal path (1970) |
+| `Timeline` | Sounds scheduled in time | Renders into one shared buffer |
+| `KickDrum`, `SnareDrum`, `HiHat`, `TomDrum`, `Cymbal` | The drum kit | Swept-sine membranes; TR-808 square stacks |
+| `BassGuitar`, `Guitar` | Plucked strings, refined | Jaffe & Smith (1983) |
+| `Mallet` | Marimba, xylophone, glockenspiel | Bar tuning ratios (Fletcher & Rossing) |
+| `Organ` | The drawbar organ | Hammond footages; ~3 dB per stop |
+| `Flute`, `Brass` | Wind voices | Fundamental-dominant spectra; Risset & Mathews (1969) |
+| `Groove` | Tempo, meter and swing | Linn's swing convention; Friberg & Sundström (2002) |
+| `BluesTrack` … `ElectronicaTrack` | Genres as specifications | [Genre sources](#academic-sources) |
 | `Filter`, `Echo`, `Reverb`, `Distortion` | The signal processors | RBJ biquads; Schroeder (1962) |
 | `Material` | What something is made of | Density, Young's modulus, loss factor, restitution |
 | `ModalBody` | An object that can ring | Modal synthesis; free-bar vibration |
@@ -230,6 +253,41 @@ physical modelling because it is almost absurdly economical: fill a delay line o
 with noise (the pluck), then recirculate it through a two-point average. Each round trip is one
 vibration; the averaging low-pass makes high harmonics die first, exactly as on a real string.
 A dozen lines that genuinely sound like a guitar.
+
+---
+
+## The synthesizer: one architecture worth learning
+
+Nearly every synthesizer sold since the Minimoog (1970) fixed it in hardware follows one signal
+path, and understanding it makes the rest of the instrument world readable:
+
+```
+oscillators (deliberately too bright)  →  low-pass filter (carve away)  →  amplifier (shape in time)
+```
+
+It is called **subtractive** synthesis because the oscillators start with more harmonics than the
+sound needs and the filter subtracts. Everything expressive then comes from *movement*:
+
+- The **amplitude envelope** shapes loudness — the difference between a pluck and a pad is mostly
+  this one contour.
+- The **filter envelope** shapes brightness *independently of loudness*, in octaves (because
+  brightness, like pitch, is heard logarithmically). The bright-open-then-dark-close "wow" of a
+  filter envelope is the single most characteristic subtractive gesture.
+- The **`Lfo`** — a slow wave used as movement, not sound — wiggles up to three destinations at
+  once, and each pairing has the name every musician knows: LFO→pitch is **vibrato**,
+  LFO→cutoff is **wah/wobble**, LFO→loudness is **tremolo**.
+
+**`SynthPatch`** gathers the whole instrument into one immutable description (the word *patch*
+is a fossil of the modular era's patch cables); **`Synthesizer`** plays one note of it. Five
+presets serve as worked examples, one per classic patch family — `Bass`, `Lead`, `Pluck`, `Pad`,
+and `Wobble(rate)`, the dubstep bass whose LFO rate you sync to the music's tempo. Read any
+preset's parameters against the architecture above and the sound explains itself — which is the
+point of having them.
+
+One implementation note worth teaching: a moving filter cannot be a new filter every block —
+replacing it would discard its memory of recent samples and click at every change. The internal
+`Biquad` therefore *retunes in place*, keeping its state while its coefficients move (the same
+transient-state discipline as `DeterministicRandom`: mutable, but never part of a description).
 
 ---
 
@@ -371,6 +429,73 @@ a pass-by sweeps the centre downward (the Doppler cue) with loudness peaking at 
 
 ---
 
+## Instruments: a rhythm section from first principles
+
+The `Instruments` namespace answers one question twelve ways: *what makes a sound read as a
+particular instrument?* Each voice is an ordinary `ISound` built on a documented synthesis
+model — no samples, and no unexplained magic numbers.
+
+**The drum kit** uses the analogue drum-machine recipes, each of which turns out to be a physics
+observation (Gordon Reid's *Synth Secrets* series, Sound on Sound 1999–2004, is the standard
+account):
+
+- **`KickDrum`** — a sine sweeping rapidly down onto its resting pitch, plus a click. The sweep
+  is real: a struck head is momentarily tenser, and tenser is higher — the same
+  tension-modulation glide Fletcher & Rossing document for timpani. The 2 ms click is what lets
+  a kick cut through on speakers that reproduce none of its 50 Hz fundamental.
+- **`SnareDrum`** — two sounds at once: the batter head's lowest modes (fundamental + 1.59×,
+  the ideal circular membrane's mode ratio) and the wires as high-passed noise. `Snappy` is the
+  balance between them.
+- **`HiHat`** — six square waves at deliberately unrelated frequencies, high-passed to sizzle:
+  the TR-808's cymbal circuit. Plain noise sounds like hiss; it is the square stack's beating
+  intermodulation that reads as *metal*. Open and closed differ only in decay.
+- **`TomDrum`** — the kick's physics tuned higher, swept less, rung longer.
+- **`Cymbal`** — 48 partials scattered log-uniformly (equal partials per octave, matching how
+  the ear hears spectral density) across 300 Hz–12 kHz. Cymbal modal density shades into chaos
+  (Fletcher & Rossing), so scattering modes honestly beats modelling them individually.
+
+**The strings** extend Karplus–Strong with the refinements from Jaffe & Smith's classic
+follow-up paper (*Extensions of the Karplus-Strong Plucked-String Algorithm*, Computer Music
+Journal, 1983): **`BassGuitar`** pre-low-passes the excitation (a thumb injects less treble than
+an ideal impulse) and rounds the output off with a body filter that tracks the note;
+**`Guitar`** adds the pick-position comb filter — plucking at fraction *p* of the string cannot
+excite harmonics with a node there, which is exactly what subtracting a copy of the excitation
+delayed by *p* of a period produces. `Guitar.Strum` staggers strings a few milliseconds apart as
+a hand does; `Guitar.PowerChord` is root + fifth + octave with the third omitted, because
+distortion's intermodulation keeps the fifth's simple 3:2 ratio harmonic where a third would
+turn to mud (Walser, *Running with the Devil*, 1993).
+
+**`Mallet`** is tuned-bar modal synthesis, and its three presets are one physics lesson: a
+uniform free bar rings at the inharmonic ratios 1 : 2.76 : 5.40 — which is the
+**glockenspiel**'s steel shimmer, left as nature made it. Marimba and xylophone makers carve an
+arch into the bar's underside to *retune* those overtones onto musical intervals: the
+**marimba** to 1 : 4 : 10 (a double octave — warm), the **xylophone** to 1 : 3 (octave + fifth,
+the bright "quint tuning"). Ratios and practice per Fletcher & Rossing, *The Physics of Musical
+Instruments*, ch. 19. Wood damps fast, steel barely at all, so the decays follow the material.
+
+**`Organ`** is additive synthesis in its oldest commercial form: nine near-sine partials at the
+Hammond drawbar footages (16′ up to 1′ — sub-octave, unison, then the harmonic series), each
+drawbar stop worth ~3 dB, a registration written as nine digits ("888000000" is the classic jazz
+setting). The famous key click — the transient Hammond tried to engineer out until players
+declared it the sound — is modelled, not suppressed.
+
+**`Flute`** is nearly a sine — measured flute spectra at moderate dynamics are dominated by the
+fundamental (Fletcher & Rossing ch. 16) — plus the two things that make a near-sine read as
+breath: noise band-passed by the same resonance as the note, and vibrato that arrives only after
+the note settles.
+
+**`Brass`** is built on the single most important fact about brass tone, from Risset & Mathews'
+landmark computer analysis of trumpet notes (*Analysis of musical-instrument tones*, Physics
+Today 22(2), 1969): **brightness follows loudness**. A static waveform through a static filter
+can never sound like brass; a sawtooth through a low-pass whose cutoff rides the amplitude
+envelope immediately does.
+
+**`SynthPad`** is deliberately the odd one out: "pad" *is* a synthesizer patch family, not an
+acoustic instrument, so the class simply plays `SynthPatch.Pad` — completing the rhythm section
+and serving as the worked example of wrapping a patch as an instrument.
+
+---
+
 ## Ambience: wind, rain, fire, thunder
 
 Ambience is Schafer's "keynote" layer of a soundscape — the sound a place *is*, heard but rarely
@@ -450,6 +575,58 @@ same place.
 
 ---
 
+## Background music: genres as specifications
+
+The genre generators are governed by one rule: **no property may be there because it "feels
+right" — every property must be documented, commonly accepted and quantifiable**, with the
+source cited. A genre, treated this way, is a specification: a tempo band, a rhythmic
+fingerprint, a harmonic vocabulary, a set of timbral roles, and a form — and a generator that
+satisfies the specification is recognisably *in* the genre, deterministically, from any seed.
+
+**`Groove`** carries the rhythmic ground: tempo, meter, and swing stated in the convention drum
+machines have used since Roger Linn's MPC — 50% is straight, 66.7% delays every second note to
+the last third of its pair (the exact triplet "shuffle"). Groove notation hides a genuinely
+interesting research result: measured jazz swing is *tempo-dependent*, roughly 3:1 at slow
+tempos, converging toward straight as tempo rises, with the short note plateauing near 100 ms
+(Friberg & Sundström, *Music Perception* 19(3), 2002). The generators use the nominal
+conventions and record the deviation. Swing warps positions *within* subdivision pairs, so the
+backbeat never moves — only the offbeats lean; the swing unit (eighths or sixteenths) says which
+level of the grid does the leaning.
+
+Each track class documents its full specification; the short form (each entry cited in the class
+docs and [sources](#academic-sources)):
+
+- **`BluesTrack`** — the 12-bar form I–I–I–I / IV–IV–I–I / V–IV–I–I with every chord a dominant
+  7th and a V turnaround in bar 12 (Open Music Theory); 2:1 shuffle; backbeat; the root–3–5–6
+  boogie bass; guitar comping alternating root+5th / root+6th dyads; sparse lead fills from the
+  hexatonic blues scale (`Scale.Blues` — minor pentatonic plus the ♭5 "blue note").
+- **`RockTrack`** — straight 4/4 with the backbeat (Moore; Everett); harmony leaning on IV and
+  the Mixolydian ♭VII, per the 200-song rock corpus (de Clercq & Temperley, 2011); distorted
+  power chords chugging in eighths; a repeating minor-pentatonic hook (Temperley); 4-bar phrases
+  opened by a crash and closed by a tom fill (Covach on rock's 4/8-bar phrase architecture).
+- **`DubstepTrack`** — 140 BPM (the genre's universally cited home tempo) in **half-time**: kick
+  on 1, snare on 3 *only*, so the perceived pulse is 70 — the genre's rhythmic fingerprint;
+  wobble bass whose LFO rate is tempo-synced to 1/4, 1/8 or 1/16 notes and re-rolled per bar; a
+  clean sine sub an octave below; harmony as a static minor-pentatonic riff; build → drop
+  structure (Snoman, *Dance Music Manual*).
+- **`HouseTrack`** — 124 BPM four-on-the-floor (Butler, *Unlocking the Groove*); open hat on
+  every offbeat eighth; clap on 2 and 4; sixteenth hats swung at 58%; the bass pumping on the
+  offbeats *between* the kicks; a static i7–VImaj7 loop stabbed off the beat by the organ —
+  classic-house chord language (Snoman; Tagg on aeolian loops).
+- **`ElectronicaTrack`** — 85 BPM downtempo: heavily swung, the snare deliberately 10–30 ms
+  *behind* the grid (the laid-back placement, stated as a constant and tested), dusty low-passed
+  drums (Snoman's chill-out chapter) — plus Brian Eno's structural device from *Music for
+  Airports* (1978): melodic loops of 7, 11 and 13 beats, mutually prime, so their coincidences
+  only repeat after 1001 beats. Deterministic, yet never the same twice within a render.
+
+Two engineering notes. Tempo ranges are *enforced* — `new DubstepTrack(bpm: 120)` throws,
+because 120 BPM dubstep isn't dubstep; the exception message says so and cites the band. And the
+tracks assemble hundreds of note events on a **`Timeline`**, which renders each event once into
+one shared output buffer — the combinator equivalent of `Delayed` + `Mix` without the
+gigabytes of intermediate buffers.
+
+---
+
 ## Layering: keeping every sound functional
 
 The brief's hardest requirement — "layer sounds so they remain functional in their intent" — is
@@ -497,7 +674,9 @@ dotnet run --project RP.Sound.Showcase --urls http://localhost:5225
 ```
 
 The page groups the demos as this document does — contact physics (impact, bounce with a gravity
-slider, scrape, roll, whoosh, pluck), granular surfaces and footsteps, ambience, mood and
+slider, scrape, roll, whoosh, pluck), granular surfaces and footsteps, the twelve instrument
+voices, the full synthesizer panel (every patch parameter as a control, presets that *show* their
+values, and a playable two-octave keyboard), the five genre generators, ambience, mood and
 tension, and the full generative scene with genre selector and weather toggles. Every card shows
 the rendered waveform and a **Re-roll** button (new seed, same physics). For client development,
 `npm run dev` serves the Svelte app with hot reload, proxying `/api` to the .NET server.
@@ -514,6 +693,10 @@ The API surface (`/api/meta` lists the presets):
 | `/api/physics/footsteps?surface&speed&weight&duration` | hard or granular surface |
 | `/api/physics/whoosh?speed&size&duration&passBy` | Strouhal whoosh |
 | `/api/synth/pluck?note&damping` | Karplus–Strong |
+| `/api/instruments/{kick,snare,hihat,tom,cymbal,bass,guitar,powerchord,mallet,organ,flute,brass}` | the instrument voices |
+| `/api/synth/play?note&osc1&osc2&detune&mix&noise&cutoff&resonance&filterOctaves&attack&decay&sustainDb&release&lfoWave&lfoRate&vibrato&wobble&tremolo` | one note on the full synthesizer |
+| `/api/synth/preset?name&note&wobbleRate` | bass · lead · pluck · pad · wobble |
+| `/api/music/genre/{blues,rock,dubstep,house,electronica}?root&bpm&bars&seed` | the genre generators |
 | `/api/ambience/{wind,rain,fire,thunder}` | the beds |
 | `/api/music/{drone,shepard,riser,stinger,heartbeat}` | mood & tension |
 | `/api/scene?mood&wind&rain&fire&duration&seed` | the full layered stereo scene |
@@ -543,6 +726,51 @@ The research this library is built on, per area:
 - M. R. Schroeder, *Natural Sounding Artificial Reverberation*, JAES 1962
   ([context](https://valhalladsp.com/2009/05/30/schroeder-reverbs-the-forgotten-algorithm/)).
 - R. Bristow-Johnson, *Audio EQ Cookbook* — the biquad coefficient formulas.
+
+**Instruments and the synthesizer**
+
+- N. H. Fletcher, T. D. Rossing, [*The Physics of Musical
+  Instruments*](https://link.springer.com/book/10.1007/978-0-387-21603-4), 2nd ed., Springer
+  1998 — membrane mode ratios, bar tuning (marimba 1:4:10, xylophone quint tuning), flute
+  spectra, cymbal modal chaos.
+- D. A. Jaffe, J. O. Smith, [*Extensions of the Karplus-Strong Plucked-String
+  Algorithm*](https://ccrma.stanford.edu/~jos/pasp/Extensions_Karplus_Strong_Algorithm.html),
+  Computer Music Journal 7(2), 1983 — pick-position comb, excitation filtering.
+- J.-C. Risset, M. V. Mathews, *Analysis of musical-instrument tones*, Physics Today 22(2),
+  1969 — the trumpet analysis behind "brightness follows loudness".
+- G. Reid, [*Synth Secrets*](https://www.soundonsound.com/series/synth-secrets-sound-sound),
+  Sound on Sound, 1999–2004 — the practical drum-synthesis recipes (bass drum part 33, snare
+  part 35).
+- Roland TR-808 service notes — the six-oscillator cymbal/hat circuit the `HiHat` stack mirrors.
+
+**Genre conventions (the background-music generators)**
+
+- A. Friberg, A. Sundström, [*Swing Ratios and Ensemble Timing in Jazz
+  Performance*](https://online.ucpress.edu/mp/article/19/3/333/61900/), Music Perception 19(3),
+  2002 — measured swing's tempo dependence; the 100 ms short-note plateau.
+- M. J. Butler, [*Unlocking the Groove: Rhythm, Meter, and Musical Design in Electronic Dance
+  Music*](https://iupress.org/9780253217042/unlocking-the-groove/), Indiana UP 2006 — four-on-
+  the-floor and EDM's multimeasure patterning.
+- R. Snoman, *Dance Music Manual: Tools, Toys and Techniques*, 3rd ed. Focal Press 2013 — the
+  production parameters for house, dubstep and chill-out (tempo bands, wobble LFO divisions,
+  arrangement blocks).
+- T. de Clercq, D. Temperley, [*A corpus analysis of rock
+  harmony*](https://davidtemperley.com/wp-content/uploads/2015/11/declercq-temperley.pdf),
+  Popular Music 30(1), 2011; D. Temperley, *The Musical Language of Rock*, OUP 2018 — IV and
+  ♭VII prominence; pentatonic melody.
+- A. F. Moore, *Rock: The Primary Text*, 2nd ed. 2001; W. Everett, *The Foundations of Rock*,
+  OUP 2009 — the backbeat as rock's rhythmic marker.
+- R. Walser, *Running with the Devil: Power, Gender, and Madness in Heavy Metal Music*, Wesleyan
+  UP 1993 — power chords, distortion and why the third is omitted.
+- J. Covach, *Form in Rock Music: A Primer*, in *Engaging Music* (ed. Stein), 2005 — verse–chorus
+  form and phrase architecture.
+- P. Tagg, *Everyday Tonality II*, MMMSP 2014 — aeolian/dorian loops in popular music.
+- [Open Music Theory](https://viva.pressbooks.pub/openmusictheory/chapter/blues-melodies-and-the-blues-scale/)
+  — the 12-bar form, dominant-7th harmony and the blues scale.
+- B. Eno, liner notes to *Ambient 1: Music for Airports*, EG 1978 — incommensurate tape loops;
+  "as ignorable as it is interesting".
+- R. Linn, [interview on the origin of MPC swing](https://www.attackmagazine.com/features/interview/roger-linn-swing-groove-magic-mpc-timing/),
+  Attack Magazine 2013 — the 50%–66.7% swing notation convention.
 
 **Emotion, tension and musical expectation**
 
@@ -590,6 +818,19 @@ The research this library is built on, per area:
   protects it automatically — intent survives layering by construction.
 - **Transient state is quarantined.** Generators and filters mutate only inside `Render`;
   nothing observable escapes.
+- **Instruments state their model and its source.** Every voice's doc comment names the
+  synthesis model and the publication it comes from; a voice that can't cite its model doesn't
+  ship.
+- **Genres are specifications, not vibes.** A generator may only encode properties that are
+  documented, commonly accepted and quantifiable — and the tempo ranges are enforced by
+  constructor validation, so an out-of-genre tempo is unconstructible, with the citation in the
+  exception message.
+- **Swing is stated in the Linn convention** (50% straight, 66.7% triplet), with the measured
+  tempo-dependence (Friberg & Sundström) recorded as the known deviation; swing warps within
+  subdivision pairs so grid boundaries — the backbeat — never move.
+- **Sequenced music renders through `Timeline`**, one shared output buffer, because the
+  combinator tree (`Delayed` + `Mix`) is the right *semantics* but the wrong *allocation
+  pattern* for hundreds of notes.
 
 ---
 
@@ -616,15 +857,32 @@ conclusion (the RP.Math discipline):
   `ModalBody.FromRecording(...)` fitting modes to a sample (example-guided modal synthesis)
   would marry the two worlds.
 - **Loudness normalisation (LUFS)** for broadcast-consistent output levels.
+- **Tempo-adaptive swing.** `Groove` states swing as a fixed ratio; Friberg & Sundström's data
+  says players scale it with tempo (short note ≈ 100 ms). A `Groove.Performed(bpm)` preset could
+  encode that curve.
+- **Velocity and articulation layers for instruments.** Each voice currently has one strike;
+  real instruments change *timbre* with dynamics (the brass model already does — the others
+  could route level into brightness the same way).
+- **Polyphonic synthesizer voice management.** `Synthesizer` plays one note per description;
+  chords are mixed descriptions. Voice allocation/stealing belongs with the real-time streaming
+  work, not before it.
+- **Vibraphone** — the mallet family's missing member needs a tremolo (rotating-vane) model on
+  top of the bar; trivial once `Lfo` is routable onto arbitrary instruments.
+- **More genres, and song-level form.** The five tracks prove the specification method; techno,
+  drum & bass and trap have equally citable specifications. All five generators are loop-scale;
+  verse–chorus architecture (Covach) over the loops is the next structural layer.
 
 ---
 
 ## Status and history
 
-The library was designed and built in one pass as a companion to RP.Math, applying its
-conventions to a new domain: 104 tests pin the units, the determinism contract, the physical
+The library was designed and built as a companion to RP.Math, applying its conventions to a new
+domain. The first pass built the core, physics, ambience, mood and mixing layers; a second pass
+added the instrument voices, the subtractive synthesizer, and the genre generators with their
+research-cited specifications. 151 tests pin the units, the determinism contract, the physical
 relationships (faster ⇒ louder, harder ⇒ brighter, smaller ⇒ higher, restitution ⇒ bounce
 timing), the psychoacoustic behaviours (equal-power pan, Shepard loudness stability, ducking),
-and the WAV encoding. The showcase (ASP.NET Core + Svelte) exercises every public generator.
-The core is deliberately offline-deterministic; real-time streaming is the next chapter and is
-sketched above.
+the genre fingerprints (four-on-the-floor, snare-on-3 half-time, swing placement, tempo
+enforcement), and the WAV encoding. The showcase (ASP.NET Core + Svelte) exercises every public
+generator, including a playable synthesizer. The core is deliberately offline-deterministic;
+real-time streaming is the next chapter and is sketched above.
