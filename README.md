@@ -123,6 +123,7 @@ graph TD
     subgraph synth["Synthesis"]
         OSC["Oscillator"] --- NOI["Noise<br/>white/pink/brown"] --- KS["PluckedString<br/>(Karplus–Strong)"] --- SW["FrequencySweep"]
         LFO["Lfo<br/>vibrato · wobble · tremolo"] --> SPX["SynthPatch<br/>osc → filter → amp"] --> SYN["Synthesizer"]
+        LFO --> FM["FmOscillator<br/>carrier × modulator (DX7)"]
     end
 
     subgraph inst["Instruments"]
@@ -177,6 +178,7 @@ graph TD
 | `Envelope` | A loudness contour (ADSR) | Physical decays are exponential |
 | `Oscillator`, `Noise`, `FrequencySweep` | Raw tonal / noisy material | Harmonic series; 1/f spectra |
 | `PluckedString` | A plucked string | Karplus & Strong (1983) |
+| `FmOscillator` | Frequency-modulation synthesis | Chowning (1973); the Yamaha DX7 (1983); Bessel sidebands |
 | `SynthPatch`, `Lfo`, `Synthesizer` | The subtractive synthesizer | The Minimoog signal path (1970) |
 | `Timeline` | Sounds scheduled in time | Renders into one shared buffer |
 | `KickDrum`, `SnareDrum`, `HiHat`, `TomDrum`, `Cymbal` | The drum kit | Swept-sine membranes; TR-808 square stacks |
@@ -187,6 +189,8 @@ graph TD
 | `Groove` | Tempo, meter and swing | Linn's swing convention; Friberg & Sundström (2002) |
 | `BluesTrack` … `ElectronicaTrack` | Genres as specifications | [Genre sources](#academic-sources) |
 | `Filter`, `Echo`, `Reverb`, `Distortion` | The signal processors | RBJ biquads; Schroeder (1962) |
+| `FilterSweep` | A corner frequency on the move | Retuning a biquad in place; octaves, not hertz |
+| `RingModulator` | Sum-and-difference clang | Diode ring mixers; the Daleks (BBC, 1963) |
 | `Material` | What something is made of | Density, Young's modulus, loss factor, restitution |
 | `ModalBody` | An object that can ring | Modal synthesis; free-bar vibration |
 | `Impact` | One strike | van den Doel & Pai; Hertz contact |
@@ -254,6 +258,26 @@ with noise (the pluck), then recirculate it through a two-point average. Each ro
 vibration; the averaging low-pass makes high harmonics die first, exactly as on a real string.
 A dozen lines that genuinely sound like a guitar.
 
+**`FmOscillator`** is the other great synthesis family, and the counterpart to the subtractive
+architecture below. Where subtractive synthesis starts bright and *removes*, frequency modulation
+starts with a sine and *creates*: let one oscillator bend the pitch of another fast enough and the
+ear stops hearing movement and starts hearing timbre. Sidebands appear around the carrier, spaced
+by the modulator's frequency, with amplitudes given by the Bessel functions Jₙ(index) — John
+Chowning's 1973 discovery, and the engine of the Yamaha DX7 (1983), the best-selling synthesizer
+ever made.
+
+Two controls do everything. **`Ratio`** sets where the sidebands land: at a whole number they fall
+on multiples of the fundamental and the result is a musical, bell-like note; at a value such as
+2.41 they fall *between* the harmonics, and a spectrum with no common fundamental is precisely
+what the ear labels metallic, clangorous or synthetic. **`Index`** sets how many of them there
+are. Note that Bessel amplitudes oscillate rather than climbing forever, so more index is not
+simply more brightness — it is a different spectrum, which is why FM rewards experiment.
+
+The carrier may also glide from `Start` to `End`. The glide lives inside the oscillator rather
+than wrapping a separate `FrequencySweep` because the modulator tracks the carrier: as the pitch
+falls the whole sideband structure falls with it and the timbre holds steady. Two chained objects
+could not express that — and a falling FM tone is the raw material of most science-fiction sound.
+
 ---
 
 ## The synthesizer: one architecture worth learning
@@ -307,6 +331,22 @@ the loops, darkening every round trip like soft furnishings do.
 
 **`Distortion`** is tanh soft-clipping: flattening peaks adds odd harmonics, heard as grit and
 aggression — which is why threat-leaning sound design reaches for it deliberately.
+
+**`FilterSweep`** is the low-pass with its corner in motion, and it is the single most useful
+gesture in sound design: a noise burst is only noise until its cutoff moves, at which point it
+becomes a whoosh, a passing vehicle, a door or a thruster. The ear reads a moving cutoff as
+movement in the world. The glide is exponential — equal octaves per second — for the same reason
+a pitch glide is: a sweep linear in hertz spends nearly all its time in the top octave and seems
+to stall at the bottom. It is built on the same retune-in-place discipline described above.
+
+**`RingModulator`** multiplies the signal by an oscillator, which replaces every partial with a
+pair at the sum and difference frequencies — and removes the original fundamental entirely. That
+last part is why it is so recognisable: the output's partials are no longer whole multiples of
+anything, so the ear cannot assign it a pitch and hears a clang instead of a note. Broadcast
+engineers built these from a ring of four diodes (hence the name) to shift radio carriers; the
+BBC Radiophonic Workshop borrowed one in 1963 to make the Daleks speak, and it has been the sound
+of a hostile machine ever since. `mix` blends back toward the dry signal when some residual pitch
+is wanted under the clang.
 
 ---
 
@@ -726,6 +766,10 @@ The research this library is built on, per area:
 - M. R. Schroeder, *Natural Sounding Artificial Reverberation*, JAES 1962
   ([context](https://valhalladsp.com/2009/05/30/schroeder-reverbs-the-forgotten-algorithm/)).
 - R. Bristow-Johnson, *Audio EQ Cookbook* — the biquad coefficient formulas.
+- J. M. Chowning, [*The Synthesis of Complex Audio Spectra by Means of Frequency
+  Modulation*](https://users.ece.cmu.edu/~xiaoqiaz/deliverables/2016-05-03/reference/Chowning.pdf),
+  JAES 21(7), 1973 — the Bessel-function sideband analysis behind `FmOscillator`, and the patent
+  that funded Stanford's CCRMA for a decade.
 
 **Instruments and the synthesizer**
 
