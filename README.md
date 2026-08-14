@@ -35,6 +35,7 @@
 - [Background music: genres as specifications](#background-music-genres-as-specifications)
 - [Games: a science-fiction palette](#games-a-science-fiction-palette)
 - [Playback: hearing it in real time](#playback-hearing-it-in-real-time)
+- [MIDI and MOD: the classic music formats](#midi-and-mod-the-classic-music-formats)
 - [Layering: keeping every sound functional](#layering-keeping-every-sound-functional)
 - [The showcase application](#the-showcase-application)
 - [Academic sources](#academic-sources)
@@ -136,6 +137,11 @@ graph TD
         GRV["Groove<br/>tempo · meter · swing"] --> TRK["BluesTrack · RockTrack · DubstepTrack<br/>HouseTrack · ElectronicaTrack"]
     end
 
+    subgraph formats["Music file formats"]
+        MF["MidiFile<br/>.mid ⇄ seconds"] --> MSQ["MidiSequence"] --> MSO["MidiSong<br/>via GeneralMidi"]
+        MODF["ModFile<br/>.mod ⇄ model"] --> MODM["ModModule"] --> MODS["ModSong<br/>ProTracker replayer"]
+    end
+
     subgraph phys["Physics — Gaver's taxonomy"]
         MAT["Material"] --> MB["ModalBody<br/>material + size ⇒ modes"]
         MB --> IMP["Impact"] --> BON["BounceSequence"]
@@ -174,6 +180,7 @@ graph TD
     ISound --> amb
     ISound --> mood
     ISound --> genres
+    ISound --> formats
     ISound --> games
     games --> play
     mix --> ISound
@@ -220,6 +227,10 @@ graph TD
 | `GenerativeScene` | A whole genre soundscape | All of the above through the mixer |
 | `SoundPlacement`, `MixLayer`, `Mixer`, `StereoBuffer` | Where sounds sit and who wins | Bregman's auditory scene analysis; equal-power law |
 | `WavFile` | 16-bit PCM encoding | The RIFF/WAVE container |
+| `MidiFile`, `MidiSequence`, `MidiNote` | .mid read/write, flattened to seconds | Standard MIDI Files 1.0 (MMA, 1988) |
+| `MidiSong`, `GeneralMidi` | A .mid performed by the library's instruments | GM level 1 sound set; velocity² amplitude |
+| `ModFile`, `ModModule`, `ModSample`, `ModPattern`, `ModCell` | .mod read/write | ProTracker's 31-sample tagged layout |
+| `ModSong` | A .mod replayed as the Amiga did | Paula periods; tick/row/pattern timing |
 
 ---
 
@@ -737,6 +748,88 @@ The mixer fills a `float[]`; whatever owns the device hands it over.
 
 ---
 
+## MIDI and MOD: the classic music formats
+
+Game music has two great historical carriers, and they embody opposite philosophies:
+
+- A **MIDI file** (.mid) is *instructions without sound* — "press this key now, release it
+  later" — and trusts whatever plays it back to supply the instruments. The same file sounds
+  different on every synthesizer, which is exactly what makes it re-orchestratable.
+- A **module** (.mod) is *instructions with their sound carried along* — the samples ARE the
+  instruments, packed into the file beside the notes — which is why an Amiga module from 1990
+  plays note-for-note identically today, and why tracker music powered a decade of games.
+
+The library supports both, read **and** write, through the same discipline as everything else:
+parsing produces an immutable description, rendering it is deterministic, and what is
+deliberately not supported is stated, with the reasoning, in [Future
+considerations](#future-considerations).
+
+### Standard MIDI Files
+
+`MidiFile.Read`/`Load` parses formats 0 and 1 (MIDI Manufacturers Association, 1988): the
+variable-length delta times, **running status** (the format's one compression trick — a data byte
+where a status byte belongs means "same status as before"), the **tempo map** (times in a .mid
+are ticks of a musical beat; Set Tempo meta events say how long a beat is, and can say it again
+mid-piece), note-on/note-off pairing (a note-on with velocity 0 *is* a note-off, so running
+status can span a whole stream), and General MIDI **program changes**. All of it is resolved at
+read time into a `MidiSequence` — plain `MidiNote`s with start and duration in seconds — so
+nothing downstream ever thinks about ticks. `MidiFile.ToBytes`/`Save` writes a format-0 file back
+out (worst quantisation: half a tick ≈ 0.5 ms at 120 BPM).
+
+`MidiSong` performs a sequence through the library's own voices. The `GeneralMidi` map assigns
+each of GM's 16 program *families* a synthesis model — organs to `Organ`, guitars to `Guitar`,
+basses to `BassGuitar`, brass to `Brass`, winds to `Flute`, mallets to `Mallet`, pianos and leads
+to `Synthesizer` patches, strings and pads to `SynthPad` — and voices channel 10 through the GM
+percussion map (35/36 kick, 38/40 snare, 42/44/46 hats, 41–50 toms in rising pitch, 49–57
+cymbals). Velocity becomes amplitude through the square law (gain = (velocity/127)²), the common
+hardware convention (Dannenberg, ICMC 2006, surveys it). Hand `MidiSong` a different
+`Func<MidiNote, ISound?>` and the same file is re-orchestrated — the point of MIDI, made
+concrete:
+
+```csharp
+MidiSequence sequence = MidiFile.Load("song.mid");
+AudioBuffer audio = new MidiSong(sequence).Render(new AudioRenderContext());
+WavFile.Save(audio, "song.wav");
+```
+
+### ProTracker modules
+
+`ModFile.Read`/`Load` parses the tagged 31-sample layout ("M.K.", "M!K!", "FLT4", "6CHN",
+"8CHN"…) into a `ModModule`: the samples (signed 8-bit PCM with loop points), up to 128
+patterns of 64 rows, and the order list that arranges them into a song. `ModFile.ToBytes`/`Save`
+writes the same layout back. Parsing is strict about structure but forgiving about the two
+defects almost every surviving module has — sample data truncated a few bytes short (padded with
+silence) and loop points overrunning their sample (clamped).
+
+`ModSong` then replays the module the way the Amiga's Paula chip did, which is a lesson in
+hardware-shaped music design:
+
+- **Pitch is a period, not a frequency.** Paula emitted one sample byte every *period* ticks of
+  its 3.546895 MHz PAL clock (two clocks per tick), so playback rate = clock ÷ (2 × period) —
+  period 428 is middle C at ≈ 8287 Hz, and *halving* the period raises pitch an octave. Every
+  slide effect works in period space, which is why tracker portamento is subtly non-linear in
+  pitch.
+- **Time is ticks.** A row lasts `speed` ticks (default 6); a tick lasts 2.5 ÷ tempo seconds
+  (default 125 — making a tick exactly one PAL video frame, because the replayer ran on the
+  vertical blank interrupt). Effects re-fire every tick: arpeggio cycles a chord at ~50 Hz,
+  vibrato steps through ProTracker's 32-entry sine table, volume slides glide — the shimmer that
+  distinguishes tracker music from a note grid.
+- **The effect column is the performance.** Supported: arpeggio (0), portamento (1/2/3),
+  vibrato (4) and tremolo (7), the slide-with-volume pairings (5/6), sample offset (9), volume
+  slide (A), position jump (B), set volume (C), pattern break (D), speed/tempo (F), and the
+  E-commands for fine slides, pattern loop, retrigger, note cut and note delay.
+
+A module that runs off its order list has a natural end; one that jumps backwards **loops
+forever** and honestly reports `Duration = ∞`, exactly like `Wind` — ask it for the length you
+want (`LoopDuration` tells you one pass). The replayer has no randomness at all: a module is the
+one sound in the library that is deterministic by *construction* rather than by seeded streams.
+
+Both formats round-trip, so the library can also *author* them: build a `MidiSequence` or
+`ModModule` in code (a genre generator's output, say), `Save` it, and open it in any sequencer
+or tracker.
+
+---
+
 ## Layering: keeping every sound functional
 
 The brief's hardest requirement — "layer sounds so they remain functional in their intent" — is
@@ -807,6 +900,8 @@ The API surface (`/api/meta` lists the presets):
 | `/api/synth/play?note&osc1&osc2&detune&mix&noise&cutoff&resonance&filterOctaves&attack&decay&sustainDb&release&lfoWave&lfoRate&vibrato&wobble&tremolo` | one note on the full synthesizer |
 | `/api/synth/preset?name&note&wobbleRate` | bass · lead · pluck · pad · wobble |
 | `/api/music/genre/{blues,rock,dubstep,house,electronica}?root&bpm&bars&seed` | the genre generators |
+| `/api/formats/midi?bpm&transpose&seed` | a .mid authored, round-tripped and performed via General MIDI |
+| `/api/formats/mod?speed&seed` | a .mod authored, round-tripped and replayed ProTracker-style |
 | `/api/ambience/{wind,rain,fire,thunder}` | the beds |
 | `/api/music/{drone,shepard,riser,stinger,heartbeat}` | mood & tension |
 | `/api/scene?mood&wind&rain&fire&duration&seed` | the full layered stereo scene |
@@ -886,6 +981,21 @@ The research this library is built on, per area:
 - R. Linn, [interview on the origin of MPC swing](https://www.attackmagazine.com/features/interview/roger-linn-swing-groove-magic-mpc-timing/),
   Attack Magazine 2013 — the 50%–66.7% swing notation convention.
 
+**Music file formats**
+
+- MIDI Manufacturers Association, [*Standard MIDI Files 1.0*](https://midi.org/standard-midi-files),
+  1988 — the .mid container: header/track chunks, variable-length quantities, running status,
+  meta events and the tempo map.
+- MIDI Manufacturers Association, [*General MIDI Level 1*](https://midi.org/general-midi-level-1),
+  1991 — the 128-program sound set, its 16 families, and the channel-10 percussion map.
+- R. B. Dannenberg, [*The Interpretation of MIDI Velocity*](https://www.cs.cmu.edu/~rbd/papers/velocity-icmc2006.pdf),
+  ICMC 2006 — how hardware maps velocity to amplitude; the square-law convention `GeneralMidi` uses.
+- Commodore-Amiga, *Amiga Hardware Reference Manual*, 3rd ed., Addison-Wesley 1991 — Paula's
+  audio channels: the 3.546895 MHz PAL clock, periods, volumes 0–64, and sample loops.
+- Lars Hamre et al., the community *Protracker module format* specifications (widely mirrored,
+  e.g. [via wiki](https://www.aes.id.au/modformat.html)) — the 1084-byte header layout, the
+  pattern-count convention, and the effect-command semantics the replayer implements.
+
 **Emotion, tension and musical expectation**
 
 - J. A. Russell, [*A Circumplex Model of Affect*](https://psycnet.apa.org/record/1981-25062-001),
@@ -945,6 +1055,22 @@ The research this library is built on, per area:
 - **Sequenced music renders through `Timeline`**, one shared output buffer, because the
   combinator tree (`Delayed` + `Mix`) is the right *semantics* but the wrong *allocation
   pattern* for hundreds of notes.
+- **MIDI is flattened to seconds at the file boundary.** Ticks, tempo maps and running status
+  are resolved once inside `MidiFile.Read`; a `MidiNote` carries absolute seconds, so no
+  downstream type ever reasons about ticks. Writing re-derives ticks at a single tempo — times
+  survive to half-tick precision (~0.5 ms), far under the ~10 ms audibility threshold.
+- **General MIDI is mapped by family, honestly.** The family (organ, guitar, bass, brass…)
+  chooses the synthesis model; families with no physical model get the synthesizer, and
+  percussion keys with no drum render silence rather than a wrong drum — the gap is documented,
+  not papered over.
+- **The MOD replayer keeps the Amiga's model** — periods, ticks, 0–64 volumes, per-tick
+  effects — rather than translating to a "nicer" note abstraction, because the format's musical
+  identity (arpeggio shimmer, period-space slides, PAL-frame timing) lives in exactly those
+  mechanics. A looping module reports `Duration = ∞` like any endless sound.
+- **File parsing is strict about structure, forgiving about famous defects.** Unknown formats
+  and corrupt structures throw with the reason; the two defects nearly every surviving module
+  has (short sample data, overrunning loop points) are repaired, because rejecting half the
+  format's real corpus would make the reader useless.
 
 ---
 
@@ -985,6 +1111,19 @@ conclusion (the RP.Math discipline):
 - **More genres, and song-level form.** The five tracks prove the specification method; techno,
   drum & bass and trap have equally citable specifications. All five generators are loop-scale;
   verse–chorus architecture (Covach) over the loops is the next structural layer.
+- **MIDI beyond notes.** Pitch bend, CC modulation (sustain pedal, expression) and aftertouch
+  are parsed past but not performed — honouring them means instruments that can change pitch and
+  level *mid-note*, which is the real-time streaming architecture again; it lands there. SMPTE
+  time division and format 2 are rejected with clear errors (film sync and multi-song archives,
+  not performances). Writing preserves one tempo; a multi-tempo writer needs the tempo map made
+  public on `MidiSequence`.
+- **Tracker formats beyond ProTracker.** The 15-sample Ultimate Soundtracker layout has no
+  signature (detection is guesswork, so rejection is honest); XM, S3M and IT each add real
+  capabilities (16-bit samples, volume envelopes, NNA) and each is a well-documented next step.
+  Of the effect commands, the obscure four are ignored and documented (E0 hardware filter,
+  E4/E7 waveform selects, E5 set finetune, EF invert loop); panning (8/E8) waits for a stereo
+  render path — Amiga hardware panned channels hard L-R-R-L, worth honouring when `ModSong`
+  learns stereo.
 
 ---
 
@@ -993,10 +1132,13 @@ conclusion (the RP.Math discipline):
 The library was designed and built as a companion to RP.Math, applying its conventions to a new
 domain. The first pass built the core, physics, ambience, mood and mixing layers; a second pass
 added the instrument voices, the subtractive synthesizer, and the genre generators with their
-research-cited specifications. 151 tests pin the units, the determinism contract, the physical
+research-cited specifications; a third pass added the music file formats — Standard MIDI File
+read/write with the General MIDI performance layer, and ProTracker module read/write with a
+faithful tick-based replayer. 180 tests pin the units, the determinism contract, the physical
 relationships (faster ⇒ louder, harder ⇒ brighter, smaller ⇒ higher, restitution ⇒ bounce
 timing), the psychoacoustic behaviours (equal-power pan, Shepard loudness stability, ducking),
 the genre fingerprints (four-on-the-floor, snare-on-3 half-time, swing placement, tempo
-enforcement), and the WAV encoding. The showcase (ASP.NET Core + Svelte) exercises every public
+enforcement), the file formats (round-trips, tempo maps, running status, Paula pitch, tracker
+timing), and the WAV encoding. The showcase (ASP.NET Core + Svelte) exercises every public
 generator, including a playable synthesizer. The core is deliberately offline-deterministic;
 real-time streaming is the next chapter and is sketched above.

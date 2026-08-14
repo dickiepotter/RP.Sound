@@ -331,6 +331,32 @@
   </section>
 
   <section>
+    <h2>Music file formats — MIDI &amp; MOD</h2>
+    <p>
+      Both demos are authored in code, written out through the real file encoder, parsed back by
+      the real decoder, and then performed — a full round-trip of each format. The MIDI piece is
+      voiced by the General MIDI map onto the library's instruments; the module is replayed the
+      way the Amiga's Paula chip did it: periods for pitch, ticks for time, effects re-firing
+      fifty times a second.
+    </p>
+    <div class="grid">
+      <SoundCard
+        title="Standard MIDI File"
+        blurb="A four-bar I–vi–IV–V .mid: marimba arpeggios, organ pads, bass and the GM drum map. Transpose shifts every pitched note; the drums stay put."
+        endpoint="/api/formats/midi"
+        params={[
+          { name: 'bpm', label: 'tempo', min: 70, max: 160, step: 2, value: 110, unit: ' BPM' },
+          { name: 'transpose', label: 'transpose', min: -12, max: 12, step: 1, value: 0, unit: ' st' },
+        ]} />
+      <SoundCard
+        title="ProTracker module"
+        blurb="A one-pattern .mod from four hand-built samples: square-wave arpeggio lead, triangle bass, noise hat, swept-sine kick. Speed is ticks per row — the tracker's tempo."
+        endpoint="/api/formats/mod"
+        params={[{ name: 'speed', label: 'speed', min: 3, max: 10, step: 1, value: 6, unit: ' ticks/row' }]} />
+    </div>
+  </section>
+
+  <section>
     <h2>Mood, tension &amp; genre</h2>
     <p>
       Emotion as coordinates: valence, arousal and tension (Russell's circumplex + Huron's
