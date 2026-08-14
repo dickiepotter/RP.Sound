@@ -9,10 +9,17 @@
   });
   let seed = $state(0);
   let busy = $state(false);
+  let playing = $state(false);
   let canvas = $state();
   let source = null;
 
   async function play() {
+    // The button is a toggle: while a sound is playing it reads Stop, and stopping the source
+    // fires onended, which resets the state.
+    if (playing) {
+      source?.stop();
+      return;
+    }
     busy = true;
     try {
       // One shared AudioContext for the whole page (browsers cap how many you may create),
@@ -28,7 +35,9 @@
       source = audio.createBufferSource();
       source.buffer = buffer;
       source.connect(audio.destination);
+      source.onended = () => (playing = false);
       source.start();
+      playing = true;
     } catch (error) {
       console.error(`[RP.Sound] ${title}:`, error);
     } finally {
@@ -103,7 +112,7 @@
   <canvas class="wave" bind:this={canvas}></canvas>
 
   <div class="actions">
-    <button onclick={play} disabled={busy}>{busy ? 'Rendering…' : '► Play'}</button>
+    <button onclick={play} disabled={busy}>{busy ? 'Rendering…' : playing ? '■ Stop' : '► Play'}</button>
     <button class="secondary" onclick={() => (seed = Math.floor(Math.random() * 100000))}>Re-roll</button>
     <span class="seed">seed {seed}</span>
   </div>
