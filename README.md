@@ -33,6 +33,8 @@
 - [Ambience: wind, rain, fire, thunder](#ambience-wind-rain-fire-thunder)
 - [Mood, tension and genre](#mood-tension-and-genre)
 - [Background music: genres as specifications](#background-music-genres-as-specifications)
+- [Games: a science-fiction palette](#games-a-science-fiction-palette)
+- [Playback: hearing it in real time](#playback-hearing-it-in-real-time)
 - [Layering: keeping every sound functional](#layering-keeping-every-sound-functional)
 - [The showcase application](#the-showcase-application)
 - [Academic sources](#academic-sources)
@@ -158,12 +160,22 @@ graph TD
         PL["SoundPlacement<br/>pan + distance"] --> ML["MixLayer<br/>+ MixRole priority"] --> MX["Mixer<br/>ducking"] --> STB["StereoBuffer"] --> WAV["WavFile"]
     end
 
+    subgraph games["Games"]
+        SF["SciFi<br/>zap · implode · chime<br/>fission · shimmer · thrust · drone"]
+    end
+
+    subgraph play["Playback — real time"]
+        SV["SampleVoice<br/>rate ⇒ pitch, constant-power pan"] --> SVM["SampleVoiceMixer<br/>pool + bed + delay bus"]
+    end
+
     ISound --> synth
     ISound --> phys
     ISound --> inst
     ISound --> amb
     ISound --> mood
     ISound --> genres
+    ISound --> games
+    games --> play
     mix --> ISound
 
     classDef found fill:#ffe9a8,stroke:#b8860b,color:#222;
@@ -191,6 +203,8 @@ graph TD
 | `Filter`, `Echo`, `Reverb`, `Distortion` | The signal processors | RBJ biquads; Schroeder (1962) |
 | `FilterSweep` | A corner frequency on the move | Retuning a biquad in place; octaves, not hertz |
 | `RingModulator` | Sum-and-difference clang | Diode ring mixers; the Daleks (BBC, 1963) |
+| `SciFi` | The science-fiction palette | Learned convention rather than physics |
+| `SampleVoice`, `SampleVoiceMixer` | Real-time playback of rendered buffers | Sampler pitch-by-rate; constant-power pan |
 | `Material` | What something is made of | Density, Young's modulus, loss factor, restitution |
 | `ModalBody` | An object that can ring | Modal synthesis; free-bar vibration |
 | `Impact` | One strike | van den Doel & Pai; Hertz contact |
@@ -664,6 +678,62 @@ because 120 BPM dubstep isn't dubstep; the exception message says so and cites t
 tracks assemble hundreds of note events on a **`Timeline`**, which renders each event once into
 one shared output buffer — the combinator equivalent of `Delayed` + `Mix` without the
 gigabytes of intermediate buffers.
+
+---
+
+## Games: a science-fiction palette
+
+Everything above derives a sound from something real — a material, a velocity, a weather system,
+an emotion. **`SciFi`** is the one namespace that does not, and it is worth being honest about
+why. There is no physics of a phaser. What there is instead is a *convention*, taught to every
+listener by decades of film and television, and it is remarkably consistent: a falling inharmonic
+tone is a discharge; a clang with no fundamental is a machine failing; a rising sweep with fast
+shallow vibrato is something arriving out of nowhere; a filter opening across noise is something
+accelerating away. These are learned associations, not acoustics, so the presets are compositions
+rather than models — but they are composed out of the same primitives as everything else, and the
+doc comment on each says which gesture is doing the work.
+
+Seven of them cover an action game's event vocabulary: `Zap`, `Implode`, `Chime`, `Fission`,
+`Shimmer`, `Thrust`, and a loopable `Drone` bed. Each takes the pitch it should centre on, so a
+game maps it from whatever it happens to know — mass, size, charge, distance — and the sound
+tracks the simulation rather than repeating identically.
+
+`Drone` is the one with a constraint the others do not have: it has to loop. Its fundamental is
+snapped to a whole number of cycles across the buffer length, so the end meets the beginning and
+the join is inaudible. The nudge is a fraction of a hertz, and it is what separates a bed that can
+run for an hour from one that ticks once every two seconds.
+
+---
+
+## Playback: hearing it in real time
+
+The library renders offline: a description goes in, a finished `AudioBuffer` comes out, and
+nothing is ever in a hurry. A game is the opposite — it needs a sound *now*, at a pitch the
+simulation decided a frame ago. **`Playback`** is the bridge, and it keeps the offline model
+intact by inverting the usual arrangement: render the palette once at start-up, then play the
+buffers back.
+
+**`SampleVoice`** plays one buffer at a variable read rate, which is how a sampler has always got
+its pitch — read faster and it plays higher and shorter. That is not free, so a caller wanting a
+wide pitch range renders the same description at a handful of base pitches and picks the nearest,
+keeping the rate near unity. Panning uses the same constant-power law as `StereoBuffer.FromMono`,
+and gain changes slide across a block rather than stepping, because a step in the waveform is a
+click.
+
+**`SampleVoiceMixer`** pools those voices behind a looping bed and a damped stereo delay. The
+delay is the part that earns its place: nothing in a game scene is really in a room, and a sound
+with no reflections at all is heard as small and close by, so offset repeats that darken as they
+decay put every event in a large cold space. It does more for the character of a whole palette
+than any individual voice does.
+
+Nothing in the fill path allocates. A garbage collection while the device is waiting for samples
+is audible as a dropout, which is the one audio bug users always notice — so voices are pooled,
+buffers are sized up front, and a test asserts that fifty consecutive fills allocate exactly zero
+bytes.
+
+There is deliberately no audio *device* here. Opening one is platform work — WinMM, OpenAL, Core
+Audio — and dragging that into the library would tie it to a platform for the sake of one class.
+The mixer fills a `float[]`; whatever owns the device hands it over.
 
 ---
 

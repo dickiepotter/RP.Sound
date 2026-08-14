@@ -11,6 +11,15 @@ public enum EnvelopeCurve
     /// same <em>fraction</em> of its energy), so decays sound natural rather than mechanical.
     /// </summary>
     Exponential,
+
+    /// <summary>
+    /// A fall as (1−t)²: most of the energy is gone within the first third of the segment, and
+    /// what remains trails away. Where <see cref="Exponential"/> eases out of full level before it
+    /// drops — which reads as a note that sustains and then stops — this leaves immediately, which
+    /// is what a hard strike or an electrical discharge does. Reach for it when a short sound is
+    /// coming out as a beep rather than a hit.
+    /// </summary>
+    Steep,
 }
 
 /// <summary>
@@ -81,9 +90,16 @@ public readonly struct Envelope
 
     private double Blend(double from, double to, double t)
     {
-        // The exponential curve squares the progress on falling segments: energy dies away
-        // proportionally to what remains, and t² is the cheapest smooth approximation of that.
-        if (Curve == EnvelopeCurve.Exponential) t *= t;
+        // Both curved options square the progress; they differ in which end they hold on to.
+        // Exponential (t²) leaves the starting level slowly and arrives fast; Steep does the
+        // reverse, so a falling segment loses most of its level in the first third.
+        t = Curve switch
+        {
+            EnvelopeCurve.Exponential => t * t,
+            EnvelopeCurve.Steep => 1 - (1 - t) * (1 - t),
+            _ => t,
+        };
+
         return from + (to - from) * t;
     }
 

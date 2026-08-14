@@ -17,6 +17,16 @@ public static class WavFile
 
     public static void Save(StereoBuffer buffer, string path) => File.WriteAllBytes(path, ToBytes(buffer));
 
+    /// <summary>
+    /// The samples alone, quantised to 16-bit, with no container around them. Audio engines that
+    /// take raw PCM — OpenAL's <c>BufferData</c> among them — want exactly this and would only have
+    /// to strip the RIFF header back off again if handed a whole file.
+    /// </summary>
+    public static short[] ToPcm16(AudioBuffer buffer) => Interleave(buffer);
+
+    /// <summary>The stereo form: left and right interleaved, one frame after another.</summary>
+    public static short[] ToPcm16(StereoBuffer buffer) => Interleave(buffer.Left, buffer.Right);
+
     private static short[] Interleave(params AudioBuffer[] channels)
     {
         int length = channels[0].Length;
