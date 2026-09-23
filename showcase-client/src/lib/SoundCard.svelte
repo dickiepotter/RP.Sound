@@ -1,5 +1,7 @@
 <script>
-  // One demo card: parameter controls -> GET /api/... -> decode -> draw waveform -> play.
+  import { render } from './render.js';
+
+  // One demo card: parameter controls -> render /api/... -> decode -> draw waveform -> play.
   let { title, blurb, endpoint, params = [], selects = [], checks = [] } = $props();
 
   let values = $state({
@@ -26,10 +28,7 @@
       // created lazily inside the click handler to satisfy autoplay policies.
       const audio = (SoundCard_ctx ??= new (window.AudioContext || window.webkitAudioContext)());
       if (audio.state === 'suspended') await audio.resume();
-      const query = new URLSearchParams({ ...values, seed });
-      const response = await fetch(`${endpoint}?${query}`);
-      if (!response.ok) throw new Error(await response.text());
-      const buffer = await audio.decodeAudioData(await response.arrayBuffer());
+      const buffer = await audio.decodeAudioData(await render(endpoint, { ...values, seed }));
       draw(buffer);
       source?.stop();
       source = audio.createBufferSource();

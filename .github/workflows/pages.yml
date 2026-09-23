@@ -1,0 +1,69 @@
+# Publishes the showcase to GitHub Pages as a static site. There is no server: the Svelte client
+# renders every sound in the visitor's browser from RP.Sound.Showcase.Browser, the showcase
+# catalog compiled to WebAssembly.
+#
+# One-off setup: Settings → Pages → Build and deployment → Source: "GitHub Actions".
+name: Deploy showcase to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push waits rather than cancelling one in flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: showcase-client/package-lock.json
+
+      # A demo that plays the wrong sound is worse than a stale one.
+      - name: Test the library
+        run: dotnet test RP.Sound.Tests --configuration Release
+
+      - name: Publish the WebAssembly build
+        run: dotnet publish RP.Sound.Showcase.Browser --configuration Release --output publish/browser
+
+      - name: Build the static client
+        working-directory: showcase-client
+        run: |
+          npm ci
+          npm run build:pages
+
+      - name: Assemble the site
+        run: |
+          cp -r publish/browser/wwwroot/_framework showcase-client/dist/
+          touch showcase-client/dist/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: showcase-client/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

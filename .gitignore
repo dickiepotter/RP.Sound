@@ -16,3 +16,6 @@ RP.Sound.Showcase/wwwroot/
 
 # Rendered audio scratch output
 *.wav
+
+# WebAssembly build of the showcase (dotnet publish RP.Sound.Showcase.Browser -o publish/browser)
+publish/

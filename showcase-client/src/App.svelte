@@ -1,6 +1,7 @@
 <script>
   import SoundCard from './lib/SoundCard.svelte';
   import SynthCard from './lib/SynthCard.svelte';
+  import { inBrowser } from './lib/render.js';
 
   const materials = ['steel', 'glass', 'wood', 'stone', 'plastic', 'rubber', 'ceramic', 'ice'];
   const surfaces = ['gravel', 'sand', 'leaves', 'snow'];
@@ -16,9 +17,10 @@
 <header>
   <h1><span>RP.Sound</span> — physically-based &amp; generative game audio</h1>
   <p>
-    Every sound on this page is synthesised on the server from an immutable description — no
-    samples, no recordings. Materials use real physical constants (density, stiffness, damping);
-    impacts, bounces, scrapes and rolls follow the actual mechanics; moods are coordinates in the
+    Every sound on this page is synthesised {inBrowser
+      ? 'in your browser, by the C# library compiled to WebAssembly,'
+      : 'on the server'} from an immutable description — no samples, no recordings. Materials use
+    real physical constants (density, stiffness, damping); impacts, bounces, scrapes and rolls follow the actual mechanics; moods are coordinates in the
     valence–arousal–tension space psychology uses to describe emotion. Same seed ⇒ identical audio;
     re-roll for a fresh take on the same physics.
   </p>

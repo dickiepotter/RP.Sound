@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "build:pages": "vite build --mode pages",
+    "preview:pages": "vite preview --mode pages"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^4.0.0",

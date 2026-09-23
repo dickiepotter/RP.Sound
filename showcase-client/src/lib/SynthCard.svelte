@@ -1,4 +1,6 @@
 <script>
+  import { render } from './render.js';
+
   // The full subtractive synthesizer panel: every SynthPatch parameter as a control, a preset
   // selector that loads the same values the C# presets use (so choosing one *shows* the patch),
   // and a two-octave keyboard — click a key, hear the patch play that note via /api/synth/play.
@@ -45,10 +47,7 @@
     try {
       const audio = (SynthCard_ctx ??= new (window.AudioContext || window.webkitAudioContext)());
       if (audio.state === 'suspended') await audio.resume();
-      const query = new URLSearchParams({ ...p, note, duration });
-      const response = await fetch(`/api/synth/play?${query}`);
-      if (!response.ok) throw new Error(await response.text());
-      const buffer = await audio.decodeAudioData(await response.arrayBuffer());
+      const buffer = await audio.decodeAudioData(await render('/api/synth/play', { ...p, note, duration }));
       draw(buffer);
       source?.stop();
       source = audio.createBufferSource();
