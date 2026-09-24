@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+  <ItemGroup>
+    <ProjectReference Include="..\RP.Sound.Showcase.Catalog\RP.Sound.Showcase.Catalog.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The library never formats for a culture, so the ICU data (and its download) can go. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- GitHub Pages compresses on the fly and ignores precompressed .br/.gz siblings. -->
+    <CompressionEnabled>false</CompressionEnabled>
+  </PropertyGroup>
+
+</Project>

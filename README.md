@@ -862,7 +862,9 @@ the thing itself never changes; only where it stands does.
 
 `RP.Sound.Showcase` is an ASP.NET Core minimal API with a Svelte front end that demonstrates and
 exercises every generator. Each endpoint renders a description to WAV deterministically —
-`seed` re-rolls the random character without changing the physics.
+`seed` re-rolls the random character without changing the physics. The endpoints themselves live
+in `RP.Sound.Showcase.Catalog`, a plain class library the server maps onto `/api/`, so the same
+table can also run in the browser (see [the static demo](#the-static-demo-on-github-pages) below).
 
 ```bash
 # 1. Build the client (once, or after client changes)
@@ -883,6 +885,32 @@ values, and a playable two-octave keyboard), the five genre generators, ambience
 tension, and the full generative scene with genre selector and weather toggles. Every card shows
 the rendered waveform and a **Re-roll** button (new seed, same physics). For client development,
 `npm run dev` serves the Svelte app with hot reload, proxying `/api` to the .NET server.
+
+### The static demo on GitHub Pages
+
+The showcase also runs with no server at all. `RP.Sound.Showcase.Browser` compiles the catalog to
+WebAssembly and exports a single `Render(path, query)` function; the static client build calls it
+from a Web Worker instead of fetching `/api/...`, so a long render never freezes the page. Both
+hosts run the same C# code, and they produce byte-identical WAVs for the same query.
+
+`.github/workflows/pages.yml` runs the tests, builds both halves and deploys them on every push to
+`main`. To switch it on once, open the repository's **Settings → Pages** and set
+**Build and deployment → Source** to **GitHub Actions**. The demo then appears at
+`https://<owner>.github.io/<repository>/`. Pages is free for public repositories.
+
+To build and preview the static site locally:
+
+```bash
+dotnet publish RP.Sound.Showcase.Browser -c Release -o publish/browser
+cd showcase-client
+npm run build:pages                               # outputs into showcase-client/dist
+cp -r ../publish/browser/wwwroot/_framework dist/
+npm run preview:pages                             # open the URL it prints
+```
+
+The first visit downloads the .NET runtime (about 4.6 MB, less once the host compresses it); the
+browser caches it after that. Rendering is slower in WebAssembly than on the server: short sounds
+are instant, and the longest (the full scene) takes a few seconds.
 
 The API surface (`/api/meta` lists the presets):
 
