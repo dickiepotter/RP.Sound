@@ -17,11 +17,11 @@ app.MapGet("/api/{**path}", (string path, HttpRequest request) =>
     {
         return ShowcaseCatalog.TryRender(path, DemoParameters.FromQueryString(request.QueryString.Value), out byte[] wav)
             ? Results.Bytes(wav, "audio/wav")
-            : Results.NotFound($"No sound at /api/{path}.");
+            : Results.Text($"No sound at /api/{path}.", statusCode: StatusCodes.Status404NotFound);
     }
     catch (Exception error) when (error is FormatException or ArgumentException)
     {
-        return Results.BadRequest(error.Message);
+        return Results.Text(error.Message, statusCode: StatusCodes.Status400BadRequest);
     }
 });
 

@@ -1,5 +1,4 @@
 using RP.Sound.Games;
-using RP.Sound.IO;
 
 namespace RP.Sound.Showcase;
 
@@ -13,8 +12,7 @@ public static partial class ShowcaseCatalog
 {
     private static void AddSciFi()
     {
-        static byte[] Render(ISound sound, DemoParameters q) =>
-            WavFile.ToBytes(sound.Render(Context(q), sound.Duration).SoftClipped());
+        static byte[] Render(ISound sound, DemoParameters q) => Wav(sound.Render(Context(q), sound.Duration));
 
         // Pitch is the one control each preset shares: a game maps it from whatever it knows —
         // mass, size, charge — so the showcase exposes it directly.
@@ -33,7 +31,7 @@ public static partial class ShowcaseCatalog
         {
             double length = Math.Clamp(q.Double("duration", 2), 0.5, 10);
             AudioBuffer loop = SciFi.Drone(q.Double("pitch", 55), length).Render(Context(q), length);
-            return WavFile.ToBytes(loop.Then(loop).SoftClipped());
+            return Wav(loop.Then(loop));
         });
     }
 }

@@ -10,9 +10,15 @@ self.onmessage = async ({ data }) => {
     return;
   }
   const { id, path, query } = data;
+  let Render;
   try {
-    exports ??= load();
-    const { Render } = await exports;
+    ({ Render } = await (exports ??= load()));
+  } catch (error) {
+    // Fatal: the page discards this worker and starts a new one on the next click.
+    self.postMessage({ fatal: true, error: `The WebAssembly runtime failed to load: ${error?.message ?? error}` });
+    return;
+  }
+  try {
     // Render returns a fresh copy of the bytes, so its buffer can be handed over rather than cloned.
     const wav = Render(path, query);
     self.postMessage({ id, wav: wav.buffer }, [wav.buffer]);
@@ -22,16 +28,11 @@ self.onmessage = async ({ data }) => {
 };
 
 async function load() {
-  try {
-    // Without this flag dotnet.js takes any worker for one of its own runtime threads and waits
-    // forever for a main thread that never comes; with it, the worker hosts a whole runtime.
-    globalThis.dotnetSidecar = true;
-    const { dotnet } = await import(/* @vite-ignore */ frameworkUrl);
-    const runtime = await dotnet.create();
-    const assembly = await runtime.getAssemblyExports(runtime.getConfig().mainAssemblyName);
-    return assembly.ShowcaseExports;
-  } catch (error) {
-    exports = undefined; // let the next click try again rather than caching the failure
-    throw error;
-  }
+  // Without this flag dotnet.js takes any worker for one of its own runtime threads and waits
+  // forever for a main thread that never comes; with it, the worker hosts a whole runtime.
+  globalThis.dotnetSidecar = true;
+  const { dotnet } = await import(/* @vite-ignore */ frameworkUrl);
+  const runtime = await dotnet.create();
+  const assembly = await runtime.getAssemblyExports(runtime.getConfig().mainAssemblyName);
+  return assembly.ShowcaseExports;
 }

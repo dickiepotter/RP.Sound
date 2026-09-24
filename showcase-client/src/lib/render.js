@@ -29,14 +29,25 @@ export async function render(endpoint, params) {
 
 function startWorker() {
   const started = new Worker(new URL('./render-worker.js', import.meta.url), { type: 'module' });
-  started.onmessage = ({ data: { id, wav, error } }) => {
+  started.onmessage = ({ data: { id, wav, error, fatal } }) => {
+    if (fatal) return abandon(started, error);
     const call = pending.get(id);
     pending.delete(id);
     if (error) call.reject(new Error(error));
     else call.resolve(wav);
   };
+  started.onerror = (event) => abandon(started, event.message || 'The render worker failed to start.');
   // The runtime sits beside index.html, wherever the site is hosted (a GitHub Pages project site
   // lives under /<repository>/, not at the root).
   started.postMessage({ frameworkUrl: new URL('_framework/dotnet.js', document.baseURI).href });
   return started;
+}
+
+// A worker whose runtime failed to load (or that died) cannot be revived in place: the browser
+// caches the failed import. Fail everything waiting on it and let the next click start afresh.
+function abandon(failed, error) {
+  failed.terminate();
+  if (worker === failed) worker = undefined;
+  for (const call of pending.values()) call.reject(new Error(error));
+  pending.clear();
 }

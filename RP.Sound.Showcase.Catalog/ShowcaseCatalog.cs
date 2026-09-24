@@ -22,9 +22,6 @@ public static partial class ShowcaseCatalog
     private static readonly Dictionary<string, Func<DemoParameters, byte[]>> Renderers =
         new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The paths the catalog can render, such as <c>physics/impact</c>.</summary>
-    public static IEnumerable<string> Paths => Renderers.Keys;
-
     /// <summary>
     /// Renders the sound at <paramref name="path"/> to WAV bytes, or returns <see langword="false"/>
     /// when there is no such sound. A malformed parameter throws <see cref="FormatException"/>.
