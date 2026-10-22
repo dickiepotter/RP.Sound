@@ -1170,3 +1170,7 @@ enforcement), the file formats (round-trips, tempo maps, running status, Paula p
 timing), and the WAV encoding. The showcase (ASP.NET Core + Svelte) exercises every public
 generator, including a playable synthesizer. The core is deliberately offline-deterministic;
 real-time streaming is the next chapter and is sketched above.
+
+## Licence and disclaimer
+
+This is a personal project by Richard Potter, shared in the hope it's useful. It's free to use under the MIT licence (see [LICENSE](LICENSE)). It's provided as is: I make no promises that it works or suits your purpose, and I take no responsibility for anything that happens from using it. It isn't a product of, or supported by, any company I work for.
